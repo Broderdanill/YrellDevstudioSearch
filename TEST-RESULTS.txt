@@ -1,0 +1,4 @@
+SearchIndexTest: 8 PASS
+WorkflowExtractorTest: 5 PASS
+Plugin XML: PASS
+ALL TESTS PASSED

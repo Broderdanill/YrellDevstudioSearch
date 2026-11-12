@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+  <extension point="org.eclipse.ui.views">
+    <category id="se.yrell.search.category" name="Yrell Search"/>
+    <view id="se.yrell.search.view" name="Yrell Search" category="se.yrell.search.category"
+      class="se.yrell.search.ui.SearchView" restorable="true" allowMultiple="false"/>
+  </extension>
+</plugin>
