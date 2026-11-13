@@ -1,18 +1,56 @@
-# Yrell Devstudio Search 0.1.0
+# Yrell Devstudio Search 0.2.0
 
-Separate Eclipse/OSGi plugin ID `se.yrell.search`, designed for BMC Developer Studio 26.1.1.
-Target local Git repository: `/home/dice/Git/YrellDevstudioSearch`.
+Standalone Eclipse/OSGi plugin `se.yrell.search`, built against BMC Developer Studio **26.1.1 build001** (Java 17).
+Target Git repository: `/home/dice/Git/YrellDevstudioSearch`.
+
+## What's new in 0.2.0
+
+- **Object-type multi-select:** check one or more of Filters, Active Links, Escalations, Filter Guides and Active Link Guides. The selection filters an existing index *without another server query*. **All/None** shortcuts.
+- **More complete workflow extraction:** structured If/Else action locations; Run Process, `$PROCESS$` and assignment values; Set Fields and Push Fields mappings, Open Window, Change Field, Call Guide, Service, Message, Notify, qualifications and nested fields. Remaining public AR API action value properties are traversed read-only, with strict bounds.
+- **Smarter search:** quoted phrases, field-scoped terms, AND, OR, exclusion. See examples below.
+- **Connections tab:** associated/target forms, guide calls/steps and possible event sender→receiver connections with clear confidence. A relation is never represented as proof of runtime execution.
+- **Two separate result sets:** exact *Matches* plus deduplicated *Objects*; opening, selected export, and **Export all matches** through BMC's own editor/DEF export APIs. The 2,000-row display cap **does not limit** object selection or export-all.
+- **Scalable UI:** background index and search jobs, virtual SWT tables; search and type-filter changes don't invoke AR Server.
+- **Refresh changed:** compares BMC last-update timestamps and reuses unchanged indexed definitions when safely verifiable. A complete baseline is required; null/changed timestamps force read again. Full reindex remains available.
+- **Index details:** per-type counts, read failures, partial/prefiltered state.
+
+## Typical usage
+
+1. Install `install/se.yrell.search_0.2.0.jar` to the **plugins** folder of Developer Studio on Windows, replacing 0.1.0. Start with `-clean` once.
+2. Window → Show View → Other → Yrell Search → Yrell Search.
+3. Choose the connected AR server and click **Build / Refresh index**. Watch Eclipse Progress. Full indexing may require many AR API calls; there is **no automatic index build at startup**.
+4. Check one or more object types under **Search in**. Choose *Everywhere* or a narrower content mode, then search.
+5. Inspect matches and their action positions. Switch to *Objects* to select/export unambiguous whole definitions. Use *Connections* to inspect linked objects; double-click a resolvable related object to open it.
+6. Click **Refresh changed** for subsequent reads, or run full refresh if object timestamps / provider metadata might be stale.
+
+## Query examples
+
+| Query | Meaning |
+|---|---|
+| `ChildClosed` | Any occurrence containing the text |
+| `event:"Child Closed"` | Literal event sender/receiver text |
+| `form:"HPD:Help Desk" action:PushFields` | Objects matching BOTH conditions |
+| `field:536870913` | Field-ID occurrence within actions or qualifications |
+| `guide:"My Guide"` | Guide call/step reference |
+| `action:SetFields` | Action type |
+| `name:"HPD:INC"` | Workflow object name |
+| `where:Else` | Where/branch of occurrence |
+| `process:$PROCESS$` | Process-related property/mapping |
+| `foo OR bar` | Either term (whole-object semantics) |
+| `action:PushFields -form:"Temporary Form"` | Matches first condition, excludes the other |
+
+Whitespace means **AND at the object level**, not necessarily within the same action. Quoted phrases preserve spaces. `type:Filter` matches that exact type; object type checkboxes give a simpler equivalent. Unrecognized `x:y` is treated as plain text to avoid invalidating common form names.
 
 ## Project layout
 
-- `source/se.yrell.search/` – Eclipse plugin (plugin.xml, OSGi manifest, Java source)
-- `install/se.yrell.search_0.1.0.jar` – compiled plugin, **no BMC dependencies bundled**
-- `scripts/build.sh` – builds Java 17 JAR against your own Developer Studio ZIP or x64 directory
-- `scripts/test.sh` – regression checks for search model and package
-- `tests/` – portable JVM regression tests
-- `scripts/install-to-git.sh` – merge this source package into target Git working tree
+- `source/se.yrell.search/`: OSGi manifest, plugin.xml and Java 17 source code
+- `install/`: distributable JAR, **without BMC binaries**
+- `scripts/build.sh`: compile against your local BMC Developer Studio ZIP (or extracted x64 tree)
+- `scripts/test.sh`: offline model/extractor/graph/index smoke tests
+- `scripts/install-to-git.sh`: copy source into an existing Git working tree
+- `tests/`: tests, including genuine BMC API value objects
 
-## Build
+## Build (Ubuntu)
 
 ```bash
 cd /home/dice/Git/YrellDevstudioSearch
@@ -20,31 +58,15 @@ bash scripts/build.sh /home/dice/Downloads/componentDeveloperStudioWindows.zip
 bash scripts/test.sh
 ```
 
-## Installation on Windows
+## Important boundaries
 
-Close Developer Studio. Copy `install/se.yrell.search_0.1.0.jar` to the Developer
-Studio `plugins/` directory. Do not remove BMC plugins. Restart Developer Studio
-with `-clean` on the first launch and then open:
-**Window → Show View → Other... → Yrell Search → Yrell Search**.
-
-No `-javaagent`, no changes to JVM or server, and Yrell Developer Tools is not required.
-
-## Compatibility note
-
-If Yrell Developer Tools Fast Object List is configured to filter customization
-types, disable its filtering for a comprehensive index and rebuild the search index.
-Results are limited to objects that the selected BMC provider returns and that the
-user has permission to read.
-
-## First test
-
-1. Connect to a **test** AR Server in Developer Studio.
-2. Open the Yrell Search view; click `Servers` if the connection is not listed.
-3. Optionally enter a narrow name prefilter and click `Build / Refresh index`.
-4. Watch progress in Eclipse Progress and wait until it is complete.
-5. Search for a known process text or field ID, inspect Matches / Objects tabs.
-6. Double-click to open a workflow, then select a few objects and use `Export selected...`.
-7. Validate the DEF file in a separate test environment.
-
-See `source/se.yrell.search/README.md` for boundaries. This is an experimental first
-release: compile tests are not a substitute for BMC Windows integration testing.
+- **No Java agent, no native hooks, no server writes and no persistent on-disk search index.** Definitions stay in process memory. Only BMC's own selected-object export writes the requested local DEF file.
+- **Saved server definitions**, not unsaved changes in an open editor. Rebuild/refresh after changes.
+- **No complete static resolution of dynamic paths**: runtime expressions may compute event names, forms, servers, field names and guide targets. Possible links are labeled as such; unresolvable forms are shown by name rather than fabricated objects.
+- **Scope**: classic AR System Active Links, Filters, Escalations and Guides. It does not index Innovation Studio rules/record definitions or all forms/menus as top-level exportable search objects.
+- **Completeness**: results cover objects the connected BMC provider returns and allows reading. If another plugin (including Fast Object List) filters the provider or permissions hide definitions, this index cannot detect omitted objects automatically. Temporarily disable provider filtering and use a full rebuild if exhaustive coverage is required.
+- **Partial index**: network failures, cancelled jobs, name-prefiltering or inaccessible definitions are surfaced explicitly. The previous good index survives a cancellation.
+- **Incremental refresh** depends on reliable BMC modification timestamps. Use **Build / Refresh index** when in doubt.
+- **Performance**: no AR API calls on UI thread for indexing/search. Some BMC APIs cannot be interrupted until an in-flight network call completes; a scheduling rule prevents this plugin from overlapping heavy index jobs.
+- **Data exposure**: workflow definitions can contain secrets or sensitive values. Search index remains memory-only; do not paste results into logs or share exported DEF without review.
+- Windows SWT UI and real AR server indexing/export still require integration verification on the target machine; these are not validated by headless Java tests.
