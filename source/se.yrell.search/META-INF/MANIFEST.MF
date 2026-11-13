@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Yrell Devstudio Search
 Bundle-SymbolicName: se.yrell.search;singleton:=true
-Bundle-Version: 0.2.1
+Bundle-Version: 0.2.3
 Bundle-Vendor: Daniel Yrell
 Bundle-Activator: se.yrell.search.SearchPlugin
 Bundle-ActivationPolicy: lazy

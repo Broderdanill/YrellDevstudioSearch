@@ -14,7 +14,7 @@ public final class SearchQuery {
         }
     }
     private static final Set<String> FIELDS = Set.of("type", "name", "event", "action", "form",
-            "field", "guide", "process", "qual", "branch", "where", "category", "ref", "target", "enabled");
+            "field", "fieldid", "fieldname", "label", "datatype", "fieldtype", "menu", "view", "guide", "process", "qual", "branch", "where", "category", "ref", "target", "enabled");
     private final List<List<Term>> groups;
     private final String error;
 

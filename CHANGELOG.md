@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.3 (2026-11-13)
+
+- Fixed the BMC SDK compilation failure in `FormIndexBuilderOfflineTest` by replacing concrete mock implementations of evolving BMC/Eclipse interfaces with dynamic proxies. The test now compiles against both local offline stubs and the 26.1.1 SDK interface contract without implementing SDK-specific abstract methods.
+- Corrected offline `IStore.getSupportedTypes()` to use `Set<IModelType>` and `ItemList` usage to use `addItem()` (the same API used in the existing Developer Studio tests).
+- Hardened the offline stub interfaces to include abstract methods reported by the real SDK (`getObjectType`, `update`, `getProperty`, `setTaskName`); tests now pass against these stricter fixtures.
+- Fixed JAR bytecode and contents checks to avoid premature `grep -q` termination with `pipefail` enabled.
+- Preserved all 0.2.2 form, field, workflow, connection and export functionality; no UI or persisted search format change.
+- Safe-update path still builds and executes tests against local BMC JARs **before** changing the Git checkout. SDK-backed testing remains required on the target machine.
+
+## 0.2.2 (2026-11-13)
+
+- Index Forms as first-class objects alongside five classic workflow object types.
+- Extract form field IDs, names, labels, data types, field types, menu and other optional metadata with BMC public metadata adapter; field enumeration failure produces PARTIAL rather than silently false-negative coverage.
+- Add precise `fieldid:`, `fieldname:`, `label:`, `datatype:`, `fieldtype:`, `menu:`, `view:` query tokens and update scope/mode controls.
+- Resolve workflow form references to indexed Forms in the Connections graph, preserving unresolved links when no form is indexed.
+- Never reuse form-field metadata merely from unchanged form timestamps on incremental refresh.
+- Add regression tests for exact field IDs, field metadata matching, parent-form deduplication, form references, hidden-field-capable API retrieval and incomplete field catalogs.
+- Provide an SDK-preflight, build/test-first upgrade script with Git source backup. The release ZIP intentionally contains source instead of an unvalidated JAR.
+
 ## 0.2.1 (2026-11-13)
 
 - Add **Copy Object Name(s)** to the context menu in all three result tabs, plus a footer action. Deduplicate repeated hits and separate selected names with newlines.

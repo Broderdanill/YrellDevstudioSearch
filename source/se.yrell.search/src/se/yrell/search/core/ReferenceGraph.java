@@ -40,9 +40,16 @@ public final class ReferenceGraph<T> {
                 String value = o.value();
                 if (value == null || value.isBlank()) continue;
                 if (cat.equals("Form") || cat.equals("Target form") || cat.equals("Service form")) {
-                    // Forms aren't indexed as search objects; retain an explicit unresolved reference.
-                    attach(e, null, cat.equals("Form") ? "Associated form" : "References form",
-                            o.location(), value, o.confidence(), dedupe);
+                    // Link only to an indexed Form of this exact name, never to a similarly
+                    // named workflow item. An excluded/unreadable form remains unresolved.
+                    SearchIndex.Entry<T> form = null;
+                    if (!isDynamic(value)) for (SearchIndex.Entry<T> candidate : byName.getOrDefault(normal(value), List.of())) {
+                        if (candidate.type().equalsIgnoreCase("Form") && candidate.name().equals(value)) {
+                            form = candidate; break;
+                        }
+                    }
+                    attach(e, form, cat.equals("Form") ? "Associated form" : "References form",
+                            o.location(), value, form == null ? SearchIndex.Confidence.POSSIBLE : o.confidence(), dedupe);
                 } else if (cat.equals("Guide reference") || cat.equals("Guide call")) {
                     List<SearchIndex.Entry<T>> targets = byName.getOrDefault(normal(value), List.of());
                     String wanted = cat.equals("Guide call") ? "Guide" : e.type().equalsIgnoreCase("Filter Guide") ? "Filter" : "Active Link";

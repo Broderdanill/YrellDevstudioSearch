@@ -1,15 +1,19 @@
-Yrell Devstudio Search 0.2.1
+Yrell Devstudio Search 0.2.3
 ===========================
 
-BMC Developer Studio 26.1.1 Java 17 plugin; standalone OSGi ID se.yrell.search.
-The source tree, build/test scripts, comprehensive feature notes and limitations
-are in the parent project README.md. No external libraries are shipped in JAR.
+Java 17 Eclipse/OSGi plugin for BMC Developer Studio 26.1.1 build001.
+Bundle ID: se.yrell.search.
 
-Open Window > Show View > Other > Yrell Search > Yrell Search.
-Indexing uses an Eclipse Job. Check one or more workflow types. The virtual result
-lists include exact matches, unique objects for export and conservative connections.
-The plugin never writes to AR Server; uses native BMC editor and DEF export.
+Searches saved AR System Forms and their field definitions as well as Filters,
+Active Links, Escalations, Filter Guides and Active Link Guides. The Forms checkbox
+includes form fields; Matches shows the field ID/name/property, while Open and
+DEF export operate on the parent Form. Field-level search includes fieldid:,
+fieldname:, label:, datatype:, fieldtype:, menu: and view:.
 
-0.2.1 adds multi-copy names in result context menus, exact-name opening of workflow
-on another connected AR server, and a compact visual map above Connections.
-Cross-server opening does not export, copy, compare or deploy definitions.
+The Connections map resolves indexed Forms referenced by workflow and still
+shows unresolved references where they cannot be statically identified.
+The plugin is read-only for server definitions and index data stays in memory.
+BMC's native editor and DEF export UI are reused.
+
+See project README.md for build/update instructions, examples and limitations.
+This source release does not distribute a JAR compiled against BMC SDK binaries.

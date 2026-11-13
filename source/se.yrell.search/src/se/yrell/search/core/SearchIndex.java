@@ -12,7 +12,7 @@ import java.util.Set;
 
 /** Immutable in-memory index. Individual occurrences can be truncated on screen; the export object set never is. */
 public final class SearchIndex<T> {
-    public enum Mode { ALL, EVENTS, ACTIONS, FIELDS, FORMS, REFERENCES }
+    public enum Mode { ALL, EVENTS, ACTIONS, FIELDS, FORMS, REFERENCES, FORM_DETAILS }
     public enum Confidence { EXACT, POSSIBLE, TEXT }
     public record Occurrence(String category, String location, String value, Confidence confidence) {
         public Occurrence {
@@ -110,7 +110,10 @@ public final class SearchIndex<T> {
             if (!inField(term.field(), o)) continue;
             String haystack = term.field().equals("where") || term.field().equals("branch") ? o.location() :
                     term.field().equals("category") ? o.category() : o.value();
-            if (haystack.toLowerCase(Locale.ROOT).contains(value)) result.add(o);
+            // Numeric Field IDs are identities, not substrings (7 must not match 17).
+            boolean match = term.field().equals("fieldid") ? haystack.trim().equalsIgnoreCase(value) :
+                    haystack.toLowerCase(Locale.ROOT).contains(value);
+            if (match) result.add(o);
         }
         // Plain text always searches the object name, even if the active category filter is narrow.
         if (term.field().isEmpty() && entry.name().toLowerCase(Locale.ROOT).contains(value))
@@ -123,8 +126,16 @@ public final class SearchIndex<T> {
             case "", "category", "where", "branch" -> true;
             case "event" -> cat.startsWith("event");
             case "action" -> cat.equals("action") || cat.equals("action property") || cat.equals("run process");
-            case "form" -> cat.equals("form") || cat.equals("target form") || cat.equals("service form");
-            case "field" -> cat.equals("field reference") || cat.equals("assignment") || cat.equals("qualification");
+            case "form" -> cat.equals("form") || cat.equals("target form") || cat.equals("service form") || cat.equals("form definition");
+            case "field" -> cat.startsWith("field ") || cat.equals("field reference") ||
+                    cat.equals("assignment") || cat.equals("qualification");
+            case "fieldid" -> cat.equals("field id") || cat.equals("field reference");
+            case "fieldname" -> cat.equals("field name");
+            case "label" -> cat.equals("field label");
+            case "datatype" -> cat.equals("field data type");
+            case "fieldtype" -> cat.equals("field type");
+            case "menu" -> cat.equals("field menu") || cat.equals("menu reference");
+            case "view" -> cat.equals("field view") || cat.equals("target view");
             case "guide" -> cat.equals("guide reference") || cat.equals("guide call");
             case "process" -> cat.equals("run process") || cat.equals("process") || cat.equals("assignment");
             case "qual" -> cat.equals("qualification");
@@ -142,10 +153,13 @@ public final class SearchIndex<T> {
             case EVENTS -> c.startsWith("event");
             case ACTIONS -> c.equals("action") || c.equals("action property") || c.equals("run process") ||
                     c.equals("target form") || c.equals("assignment") || c.equals("guide call") || c.equals("service form");
-            case FIELDS -> c.equals("field reference") || c.equals("qualification") || c.equals("assignment");
-            case FORMS -> c.equals("form") || c.equals("target form") || c.equals("service form");
+            case FIELDS -> c.startsWith("field ") || c.equals("field reference") ||
+                    c.equals("qualification") || c.equals("assignment");
+            case FORMS -> c.startsWith("form ") || c.equals("form") ||
+                    c.equals("target form") || c.equals("service form");
             case REFERENCES -> c.equals("guide reference") || c.equals("guide call") || c.equals("target form") ||
                     c.equals("service form") || c.equals("form") || c.startsWith("event");
+            case FORM_DETAILS -> c.startsWith("form ") || c.startsWith("field ");
             default -> true;
         };
     }

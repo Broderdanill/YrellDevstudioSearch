@@ -50,8 +50,8 @@ public final class SearchView extends ViewPart {
     };
     private static final String[] TYPES = { IARSystemTypes.FILTER.getTypeName(), IARSystemTypes.ACTIVE_LINK.getTypeName(),
             IARSystemTypes.ESCALATION.getTypeName(), IARSystemTypes.FILTER_GUIDE.getTypeName(),
-            IARSystemTypes.ACTIVE_LINK_GUIDE.getTypeName() };
-    private static final String[] LABELS = { "Filters", "Active Links", "Escalations", "Filter Guides", "Active Link Guides" };
+            IARSystemTypes.ACTIVE_LINK_GUIDE.getTypeName(), IARSystemTypes.FORM.getTypeName() };
+    private static final String[] LABELS = { "Filters", "Active Links", "Escalations", "Filter Guides", "Active Link Guides", "Forms" };
     private Combo server, mode;
     private Text query, namePrefilter, details;
     private Table matchTable, objectTable, relationTable;
@@ -86,7 +86,7 @@ public final class SearchView extends ViewPart {
         server.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         Button servers = button(serverBar, "Reload servers", "Refresh connected AR servers");
         servers.addListener(SWT.Selection, e -> reloadServers());
-        refresh = button(serverBar, "Build / Refresh index", "Fetch saved workflow definitions in Eclipse Progress");
+        refresh = button(serverBar, "Build / Refresh index", "Fetch saved workflow, forms and field metadata in Eclipse Progress");
         refresh.addListener(SWT.Selection, e -> startIndex(false));
         refreshChanged = button(serverBar, "Refresh changed", "Reuse definitions whose BMC modification timestamps are unchanged; rescan all names to detect deletions");
         refreshChanged.setEnabled(false);
@@ -94,18 +94,18 @@ public final class SearchView extends ViewPart {
 
         Composite searchLine = line(root, 3);
         query = new Text(searchLine, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH | SWT.CANCEL);
-        query.setMessage("Search workflow, events, fields, forms, actions...");
+        query.setMessage("Search workflows, forms, field IDs, field names...");
         query.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         query.addListener(SWT.DefaultSelection, e -> runSearch());
         mode = new Combo(searchLine, SWT.READ_ONLY);
-        mode.setItems(new String[]{"Everywhere", "Events", "Actions", "Fields & expressions", "Forms", "References"});
+        mode.setItems(new String[]{"Everywhere", "Events", "Actions", "Fields (definitions & references)", "Forms (names & references)", "References", "Form/field metadata"});
         mode.select(0);
         mode.setToolTipText("Optional content filter; use Everywhere for broad searches");
         mode.addListener(SWT.Selection, e -> runSearch());
         Button find = button(searchLine, "Search", "Search the local index (no AR server request)");
         find.addListener(SWT.Selection, e -> runSearch());
 
-        Composite typeBar = line(root, 8);
+        Composite typeBar = line(root, 9);
         new Label(typeBar, SWT.NONE).setText("Search in:");
         for (int i = 0; i < TYPES.length; i++) {
             final int pos = i;
@@ -115,9 +115,9 @@ public final class SearchView extends ViewPart {
             cb.addListener(SWT.Selection, e -> runSearch());
             typeChecks[pos] = cb;
         }
-        Button all = button(typeBar, "All", "Search all workflow types");
+        Button all = button(typeBar, "All", "Search all object types");
         all.addListener(SWT.Selection, e -> { for (Button b : typeChecks) b.setSelection(true); runSearch(); });
-        Button none = button(typeBar, "None", "Clear all workflow type selections");
+        Button none = button(typeBar, "None", "Clear all object type selections");
         none.addListener(SWT.Selection, e -> { for (Button b : typeChecks) b.setSelection(false); runSearch(); });
 
         Composite tools = line(root, 4);
@@ -134,12 +134,13 @@ public final class SearchView extends ViewPart {
         advanced = line(root, 2);
         GridData advancedData = (GridData) advanced.getLayoutData();
         advancedData.exclude = true; advanced.setVisible(false);
-        new Label(advanced, SWT.NONE).setText("Name prefilter for NEXT index build (leave empty for full coverage)");
+        new Label(advanced, SWT.NONE).setText("Object-name prefilter for NEXT index build (NOT a field-name filter)");
         namePrefilter = new Text(advanced, SWT.BORDER);
         namePrefilter.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        namePrefilter.setToolTipText("Limits which names are fetched from AR Server. A nonempty value creates an intentionally incomplete index.");
+        namePrefilter.setToolTipText("Only form/workflow object names are tested; field names are NOT tested. Leave empty to index all forms and fields.");
         Label help = new Label(advanced, SWT.WRAP);
         help.setText("Queries: event:ChildClosed · form:\"HPD:Help Desk\" · action:PushFields · field:536870913 · " +
+                "fieldid:536870913 · fieldname:\"Short Description\" · label:Status · datatype:CHAR · " +
                 "name:Incident · branch:Else · term1 term2 (AND) · term1 OR term2 · -excluded");
         GridData helpData = new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1);
         helpData.widthHint = 750; help.setLayoutData(helpData);
@@ -172,14 +173,14 @@ public final class SearchView extends ViewPart {
         Composite footer = line(root, 6);
         status = new Label(footer, SWT.NONE);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-        status.setText("Select an AR server and build an index. Saved definitions only.");
+        status.setText("Select an AR server and build an index. Saved definitions only (including forms and fields).");
         Button copyNames = button(footer, "Copy names", "Copy names of selected objects, one per line");
         copyNames.addListener(SWT.Selection, e -> copySelectedNames());
         Button open = button(footer, "Open selected", "Open highlighted objects using BMC's editor");
         open.addListener(SWT.Selection, e -> openSelected());
         Button export = button(footer, "Export selected...", "BMC DEF export for highlighted objects");
         export.addListener(SWT.Selection, e -> exportSelected());
-        Button exportAll = button(footer, "Export all matches...", "Export every matching unique object, including those outside displayed match limit");
+        Button exportAll = button(footer, "Export all matches...", "Export every unique matching workflow/form; a field match exports its parent form");
         exportAll.addListener(SWT.Selection, e -> exportAll());
         Button reset = button(footer, "Clear", "Clear query and reset scope");
         reset.addListener(SWT.Selection, e -> { query.setText(""); for (Button cb : typeChecks) cb.setSelection(true); mode.select(0); clearResults(); });
@@ -390,7 +391,7 @@ public final class SearchView extends ViewPart {
         matchTable.setItemCount(0); objectTable.setItemCount(0); relationTable.removeAll();
         if(connectionOverview!=null && !connectionOverview.isDisposed())
             connectionOverview.showObject(null,List.of(),List.of());
-        details.setText("Search saved workflow definitions. Select a match for details and connections.");
+        details.setText("Search saved workflows, forms and fields. Field matches open/export their parent form.");
     }
     private void startIndex(boolean incremental) {
         IStore chosen = selectedStore();
@@ -407,7 +408,7 @@ public final class SearchView extends ViewPart {
         refresh.setEnabled(false); refreshChanged.setEnabled(false); cancel.setEnabled(true);
         status.setText("Indexing in Eclipse Progress. Previous index stays available until new index succeeds.");
         Display display = getSite().getShell().getDisplay();
-        Job job = new Job("Yrell Search: Index workflow – " + chosen.getName()) {
+        Job job = new Job("Yrell Search: Index definitions – " + chosen.getName()) {
             @Override protected IStatus run(IProgressMonitor monitor) {
                 try {
                     IndexBuilder.BuildResult built = IndexBuilder.build(chosen,prefilter,prior,monitor);
@@ -419,7 +420,7 @@ public final class SearchView extends ViewPart {
                         index = next; graph = nextGraph; sourceStore = chosen; indexedNamePrefilter = prefilter;
                         activeJob = null; refresh.setEnabled(true); refreshChanged.setEnabled(false); cancel.setEnabled(false);
                         runSearch();
-                        if (query.getText().isBlank()) status.setText(next.size() + " indexed workflow objects · " +
+                        if (query.getText().isBlank()) status.setText(next.size() + " indexed objects · " +
                                 nextGraph.totalLinks() + " connections · " +
                                 (next.complete() ? "ready" : "PARTIAL ("+next.problems().size()+" read problems)") +
                                 (!prefilter.isBlank() ? " · NAME-PREFILTERED" : "") + " · " + next.server());
@@ -459,6 +460,9 @@ public final class SearchView extends ViewPart {
             long count=index.entries().stream().filter(e->e.type().equals(t)).count();
             text.append(LABELS[i]).append(": ").append(count).append("\n");
         }
+        long fieldCount=index.entries().stream().filter(e->e.type().equals(IARSystemTypes.FORM.getTypeName()))
+                .flatMap(e->e.occurrences().stream()).filter(o->o.category().equals("Field ID")).count();
+        text.append("Indexed field definitions: ").append(fieldCount).append("\n");
         if(!indexedNamePrefilter.isBlank()) text.append("\nName prefilter: ").append(indexedNamePrefilter).append("\n");
         if(!index.problems().isEmpty()) {
             text.append("\nRead/index limitations:\n");
@@ -478,10 +482,11 @@ public final class SearchView extends ViewPart {
         if (!current()) { clearResults(); status.setText("Build an index for the connected account/overlay first."); return; }
         Set<String> allowed=new LinkedHashSet<>();
         for(int i=0;i<typeChecks.length;i++) if(typeChecks[i].getSelection()) allowed.add(TYPES[i]);
-        if(allowed.isEmpty()) { clearResults(); status.setText("Select at least one workflow type under Search in."); return; }
+        if(allowed.isEmpty()) { clearResults(); status.setText("Select at least one object type under Search in."); return; }
         String phrase=query.getText();
         if(phrase.isBlank()) {
-            clearResults(); status.setText(index.size()+" indexed workflow objects · enter a query to search."); return;
+            clearResults(); status.setText(index.size()+" indexed objects (workflow + forms) · enter a query to search."+
+                    (!index.complete()?" · PARTIAL INDEX (see Index details)":"")); return;
         }
         SearchIndex.Mode selectedMode=SearchIndex.Mode.values()[Math.max(0,mode.getSelectionIndex())];
         SearchIndex<IModelItem> snapshot=index;

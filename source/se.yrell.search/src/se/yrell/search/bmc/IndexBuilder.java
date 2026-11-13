@@ -21,7 +21,8 @@ import se.yrell.search.core.SearchIndex;
 public final class IndexBuilder {
     private static final List<IModelType> TYPES = List.of(IARSystemTypes.ACTIVE_LINK,
             IARSystemTypes.FILTER, IARSystemTypes.ESCALATION,
-            IARSystemTypes.ACTIVE_LINK_GUIDE, IARSystemTypes.FILTER_GUIDE);
+            IARSystemTypes.ACTIVE_LINK_GUIDE, IARSystemTypes.FILTER_GUIDE,
+            IARSystemTypes.FORM);
     private IndexBuilder() {}
     public record BuildResult(SearchIndex<IModelItem> index, int reused, int fetched) {}
     public static SearchIndex<IModelItem> build(IStore store, String nameFilter, IProgressMonitor monitor) {
@@ -39,7 +40,7 @@ public final class IndexBuilder {
         Map<String,SearchIndex.Entry<IModelItem>> old = new HashMap<>();
         if (canReuse) for (SearchIndex.Entry<IModelItem> e:previous.entries()) old.put(key(e.type(),e.name()),e);
         int reused=0,fetched=0;
-        monitor.beginTask(canReuse?"Refresh changed AR workflow":"Index saved AR workflow definitions", IProgressMonitor.UNKNOWN);
+        monitor.beginTask(canReuse?"Refresh changed AR definitions":"Index saved AR forms and workflow definitions", IProgressMonitor.UNKNOWN);
         try {
             for (IModelType type : TYPES) {
                 if (monitor.isCanceled()) break;
@@ -57,7 +58,9 @@ public final class IndexBuilder {
                     monitor.subTask(type.getTypeName()+": "+item.getName());
                     try {
                         SearchIndex.Entry<IModelItem> prior = old.get(key(type.getTypeName(),item.getName()));
-                        if (prior!=null && timestampEqual(prior.object(),item)) {
+                        // A form timestamp does not necessarily change when an individual field is updated.
+                        // Always fetch form+field metadata even when the form timestamp is unchanged.
+                        if (type != IARSystemTypes.FORM && prior!=null && timestampEqual(prior.object(),item)) {
                             entries.add(new SearchIndex.Entry<>(prior.type(),prior.name(),item,prior.occurrences()));
                             reused++;
                         } else {
@@ -65,7 +68,12 @@ public final class IndexBuilder {
                             if (definition==null) {
                                 if (problems.size()<100) problems.add(type.getTypeName()+": null definition");
                             } else {
-                                entries.add(WorkflowExtractor.extract(item,definition));
+                                if (type == IARSystemTypes.FORM) {
+                                    FormExtractor.Extracted form = FormExtractor.extract(item,definition,store);
+                                    entries.add(form.entry());
+                                    if (!form.complete() && problems.size()<100)
+                                        problems.add("Form " + item.getName() + ": " + form.problem());
+                                } else entries.add(WorkflowExtractor.extract(item,definition));
                                 fetched++;
                             }
                         }

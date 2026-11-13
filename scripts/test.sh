@@ -2,7 +2,7 @@
 set -o pipefail
 set -u
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-JAR="$ROOT/install/se.yrell.search_0.2.1.jar"
+JAR="$ROOT/install/se.yrell.search_0.2.3.jar"
 if [[ ! -f "$JAR" ]]; then echo 'Build first.' >&2; exit 2; fi
 mkdir -p "$ROOT/.build/tests"
 STUDIO="${1:-$ROOT/.build/devstudio/x64/plugins}"
@@ -15,11 +15,11 @@ for test_file in "$ROOT"/tests/*Test.java; do
   test_name="$(basename "$test_file" .java)"
   java -cp "$CP" "$test_name" || exit 1
 done
-if ! javap -verbose -classpath "$JAR" se.yrell.search.ui.SearchView | grep -q 'major version: 61'; then
+if ! javap -verbose -classpath "$JAR" se.yrell.search.ui.SearchView | grep -F 'major version: 61'; then
   echo 'Incorrect bytecode version (expected Java 17).' >&2; exit 1
 fi
-jar tf "$JAR" | grep -q 'se/yrell/search/ui/SearchView.class' || exit 1
-jar tf "$JAR" | grep -q '^plugin.xml$' || exit 1
+jar tf "$JAR" | grep -F 'se/yrell/search/ui/SearchView.class' || exit 1
+jar tf "$JAR" | grep -x 'plugin.xml' || exit 1
 python3 - "$ROOT/source/se.yrell.search/plugin.xml" <<'PY'
 import sys,xml.etree.ElementTree as ET
 root=ET.parse(sys.argv[1]).getroot()

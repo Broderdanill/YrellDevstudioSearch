@@ -1,88 +1,108 @@
-# Yrell Devstudio Search 0.2.1
+# Yrell Devstudio Search 0.2.3
 
-Standalone Eclipse/OSGi plugin `se.yrell.search`, built against BMC Developer Studio **26.1.1 build001** (Java 17).
-Target Git repository: `/home/dice/Git/YrellDevstudioSearch`.
+Standalone, read-only Eclipse/OSGi search view (`se.yrell.search`) for classic BMC Developer Studio **26.1.1 build001**, Java 17. Based on the supplied 0.2.1 sources.
 
-## What's new in 0.2.1
+## What changed in 0.2.3
 
-- **Copy Object Name(s):** right-click an entry in Matches, Objects or Connections to copy one or several selected unique object names, one per line. A **Copy names** button also appears in the footer.
-- **Open on Server → [connected server]:** right-click selected workflow objects, pick another connected AR server (displayed with account and overlay), and resolve the **exact object type and name** there. It runs as an Eclipse Progress Job. Missing objects are reported; the plugin never falls back to opening a source-server item.
-- **Visual Connections map:** a compact read-only overview above the exact Connections list shows incoming relations, the selected object and outgoing relations, with three labels per side and a +N indicator for busy objects.
-- Native BMC opening and DEF export are preserved. No Java agent, external library or BMC binaries are bundled.
+**SDK test compatibility fix:** the `FormIndexBuilderOfflineTest` now uses dynamic
+proxies for `IModelObject`, `IModelItem`, `IStore` and `IProgressMonitor` instead
+of concrete test classes. This removes compilation failures from SDK-specific
+abstract methods. The offline stub uses the real SDK's `Set` return type and
+`ItemList.addItem` method. Source and plugin functionality are otherwise unchanged
+from 0.2.2, including Forms, field searches and connection navigation.
 
-### Open on Server – boundaries
+### 0.2.2 functionality retained
 
-1. The context menu lists other **currently connected AR servers**. Destination identity is determined by exact object type and exact name, scoped to the destination account and overlay.
-2. Nothing is copied or deployed to the destination, and the source index is not changed.
-3. Uses the destination's BMC `IStore.getItemList(type,names)` name-scoped lookup. Missing, unsupported and inaccessible items are reported, not silently substituted. Some BMC providers may not support this lookup.
-4. Multi-selection is supported. Existing target objects open even if others were not found, with a summary of all unavailable objects. The lookup runs in Eclipse Progress rather than on the SWT UI thread.
-5. **Export always remains from the indexed source server.** Cross-server opening is not a comparison tool; two identically named objects may have different definitions.
-6. UI behavior, live AR-server resolution and BMC native opening on another server require testing in the Windows installation.
 
-## What's new in 0.2.0
+**Forms are now first-class search objects**, alongside Filters, Active Links, Escalations, Filter Guides and Active Link Guides. Form definitions and their field definitions participate in the existing query engine and in the same result/external-open/DEF-export workflow.
 
-- **Object-type multi-select:** check one or more of Filters, Active Links, Escalations, Filter Guides and Active Link Guides. The selection filters an existing index *without another server query*. **All/None** shortcuts.
-- **More complete workflow extraction:** structured If/Else action locations; Run Process, `$PROCESS$` and assignment values; Set Fields and Push Fields mappings, Open Window, Change Field, Call Guide, Service, Message, Notify, qualifications and nested fields. Remaining public AR API action value properties are traversed read-only, with strict bounds.
-- **Smarter search:** quoted phrases, field-scoped terms, AND, OR, exclusion. See examples below.
-- **Connections tab:** associated/target forms, guide calls/steps and possible event sender→receiver connections with clear confidence. A relation is never represented as proof of runtime execution.
-- **Two separate result sets:** exact *Matches* plus deduplicated *Objects*; opening, selected export, and **Export all matches** through BMC's own editor/DEF export APIs. The 2,000-row display cap **does not limit** object selection or export-all.
-- **Scalable UI:** background index and search jobs, virtual SWT tables; search and type-filter changes don't invoke AR Server.
-- **Refresh changed:** compares BMC last-update timestamps and reuses unchanged indexed definitions when safely verifiable. A complete baseline is required; null/changed timestamps force read again. Full reindex remains available.
-- **Index details:** per-type counts, read failures, partial/prefiltered state.
+- **Search in → Forms** checkbox; multiple object types can still be selected without rebuilding an index.
+- **Field metadata search:** Field ID, field name, label, data type, field type, menu, help text, default and optional view names, if exposed by the provider. Search hits show the **parent form**, `Field <ID> · <name>`, the specific property and its value.
+- **New query tokens** `fieldid:`, `fieldname:`, `label:`, `datatype:`, `fieldtype:`, `menu:`, `view:`. Existing `field:` also searches form fields, and `form:` matches form definitions plus workflow form references. Unrecognized `x:y` remains plain text.
+- **Content modes** distinguish fields, form references, and form/field definitions; type checkboxes remain the primary object-scope filter.
+- **Connections** now resolve workflow form references into an indexed Form object where the destination name matches exactly. Incoming workflow references are visible from the Form. References to absent or dynamically named forms remain unresolved.
+- **Refresh changed** always rereads Forms and their fields even if the parent Form's timestamp is unchanged. Workflow definitions still use the original timestamp-safe reuse optimization.
+- **Index details** show form counts and the number of extracted field IDs. If the BMC adapter cannot enumerate a form's fields, the form name is still searchable but the index is explicitly **PARTIAL**; an unavailable field catalogue is never silently treated as an empty form.
 
-## Typical usage
+### Example queries
 
-1. Install `install/se.yrell.search_0.2.1.jar` to the **plugins** folder of Developer Studio on Windows, replacing 0.2.0 (and any older plugin JAR). Start with `-clean` once.
-2. Window → Show View → Other → Yrell Search → Yrell Search.
-3. Choose the connected AR server and click **Build / Refresh index**. Watch Eclipse Progress. Full indexing may require many AR API calls; there is **no automatic index build at startup**.
-4. Check one or more object types under **Search in**. Choose *Everywhere* or a narrower content mode, then search.
-5. Inspect matches and action positions. Switch to *Objects* to select/export unique definitions. Right-click a row to **Copy Object Name(s)** or **Open on Server** (multi-select supported). Use *Connections* for a visual overview and an exact list; double-click a resolvable related object to open it.
-6. Click **Refresh changed** for subsequent reads, or run full refresh if object timestamps / provider metadata might be stale.
-
-## Query examples
-
-| Query | Meaning |
+| Search text | Result |
 |---|---|
-| `ChildClosed` | Any occurrence containing the text |
-| `event:"Child Closed"` | Literal event sender/receiver text |
-| `form:"HPD:Help Desk" action:PushFields` | Objects matching BOTH conditions |
-| `field:536870913` | Field-ID occurrence within actions or qualifications |
-| `guide:"My Guide"` | Guide call/step reference |
-| `action:SetFields` | Action type |
-| `name:"HPD:INC"` | Workflow object name |
-| `where:Else` | Where/branch of occurrence |
-| `process:$PROCESS$` | Process-related property/mapping |
-| `foo OR bar` | Either term (whole-object semantics) |
-| `action:PushFields -form:"Temporary Form"` | Matches first condition, excludes the other |
+| `form:"HPD:Help Desk"` | The Form object and workflow references to the form |
+| `type:Form` | Form definitions (if Forms checkbox is selected) |
+| `fieldid:536870913` | The exact Field ID in a form definition, plus exact workflow field-ID references |
+| `fieldname:"Short Description"` | Forms that contain a field with a matching name |
+| `field:"Status"` | Field names/labels/IDs and existing workflow field references |
+| `form:"HPD:Help Desk" fieldid:536870913` | Forms satisfying BOTH clauses (object-level AND) |
+| `label:"Status"` | A form's field label when the provider exposes it |
+| `datatype:CHAR` | Field metadata data type (some provider versions expose numeric type codes instead) |
+| `menu:"My Menu"` | Named field menus and workflow menu references |
+| `fieldid:7 OR fieldname:Status` | Either term (object-level OR) |
+| `type:Form -fieldname:"Temporary"` | Forms excluding matching field names |
 
-Whitespace means **AND at the object level**, not necessarily within the same action. Quoted phrases preserve spaces. `type:Filter` matches that exact type; object type checkboxes give a simpler equivalent. Unrecognized `x:y` is treated as plain text to avoid invalidating common form names.
+**Exact numeric IDs:** `fieldid:7` matches `7` but not `17`. Bare `field:7` retains substring semantics for backward compatibility. A field hit belongs to its **Form**: double-click opens the native form editor and DEF export exports the containing form once, no matter how many fields matched. The plugin does not create stand-alone field editors or export individual fields.
 
-## Project layout
+## Install / update from Linux
 
-- `source/se.yrell.search/`: OSGi manifest, plugin.xml and Java 17 source code
-- `install/`: distributable JAR, **without BMC binaries**
-- `scripts/build.sh`: compile against your local BMC Developer Studio ZIP (or extracted x64 tree)
-- `scripts/test.sh`: offline model/extractor/graph/index smoke tests
-- `scripts/install-to-git.sh`: copy source into an existing Git working tree
-- `tests/`: tests, including genuine BMC API value objects
+The release ZIP contains **full source and automated build/update scripts, not a prebuilt 0.2.3 plugin JAR**. Because the BMC Developer Studio SDK is proprietary, the plugin must be compiled against the locally installed Developer Studio 26.1.1 libraries. This also validates the Java API against the exact target version.
 
-## Build (Ubuntu)
+Download these two files to the same directory (normally `~/Downloads`):
+
+- `YrellDevstudioSearch-0.2.3-FullSource.zip`
+- `yrell-search-0203-update.sh`
+
+For the existing Git checkout used in the supplied 0.2.1 scripts:
+
+```bash
+bash ~/Downloads/yrell-search-0203-update.sh
+```
+
+Optional custom Git repository and SDK path:
+
+```bash
+bash ~/Downloads/yrell-search-0203-update.sh \
+  /home/dice/Git/YrellDevstudioSearch \
+  /home/dice/Downloads/componentDeveloperStudioWindows.zip
+```
+
+The script performs SDK preflight, extracts the release in a temporary directory, runs the offline search/form regression suite, builds with your BMC libraries, runs the full regression suite, **then** backs up the existing Git source tree (excluding `.git` and `.build`), installs 0.2.3 and copies `se.yrell.search_0.2.3.jar` to `~/Downloads`. Build/test failure leaves the Git checkout unchanged. A backup of the old sources is written to `~/Downloads/YrellDevstudioSearch-backup-<timestamp>/`.
+
+Install `se.yrell.search_0.2.3.jar` to Developer Studio's Windows `plugins` directory, removing any older `se.yrell.search_0.2.1.jar` or `se.yrell.search_0.2.2.jar` file. Launch once with `-clean` and open **Window → Show View → Other → Yrell Search**.
+
+### Manual build
 
 ```bash
 cd /home/dice/Git/YrellDevstudioSearch
+bash scripts/test-core-offline.sh
 bash scripts/build.sh /home/dice/Downloads/componentDeveloperStudioWindows.zip
 bash scripts/test.sh
 ```
 
-## Important boundaries
+## Verification checklist in Developer Studio
 
-- **No Java agent, no native hooks, no server writes and no persistent on-disk search index.** Definitions stay in process memory. Only BMC's own selected-object export writes the requested local DEF file.
-- **Saved server definitions**, not unsaved changes in an open editor. Rebuild/refresh after changes.
-- **No complete static resolution of dynamic paths**: runtime expressions may compute event names, forms, servers, field names and guide targets. Possible links are labeled as such; unresolvable forms are shown by name rather than fabricated objects.
-- **Scope**: classic AR System Active Links, Filters, Escalations and Guides. It does not index Innovation Studio rules/record definitions or all forms/menus as top-level exportable search objects.
-- **Completeness**: results cover objects the connected BMC provider returns and allows reading. If another plugin (including Fast Object List) filters the provider or permissions hide definitions, this index cannot detect omitted objects automatically. Temporarily disable provider filtering and use a full rebuild if exhaustive coverage is required.
-- **Partial index**: network failures, cancelled jobs, name-prefiltering or inaccessible definitions are surfaced explicitly. The previous good index survives a cancellation.
-- **Incremental refresh** depends on reliable BMC modification timestamps. Use **Build / Refresh index** when in doubt.
-- **Performance**: no AR API calls on UI thread for indexing/search. Some BMC APIs cannot be interrupted until an in-flight network call completes; a scheduling rule prevents this plugin from overlapping heavy index jobs.
-- **Data exposure**: workflow definitions can contain secrets or sensitive values. Search index remains memory-only; do not paste results into logs or share exported DEF without review.
-- Windows SWT UI and real AR server indexing/export still require integration verification on the target machine; these are not validated by headless Java tests.
+1. Select a connected AR server and **Build / Refresh index** with an empty *object-name prefilter*. Confirm Forms appear in **Index details** alongside workflow.
+2. Select **Forms** alone and query `type:Form`. Double-click a result to confirm native editor opening.
+3. Search a known field using `fieldid:<numeric ID>` and `fieldname:"<name>"`. In **Matches**, verify the matching location says `Field <ID> · <name>` and that **Objects** contains only the parent form.
+4. Search `form:"<form>"` with workflow and Forms selected, and verify both sides appear. Select a workflow reference, then view **Connections**; if the form was indexed, it should resolve and open correctly.
+5. Test **Export selected** for a Form and for mixed workflow/Form selections through BMC's native DEF dialog.
+6. Change a field on the server, click **Refresh changed**, and ensure the refreshed field metadata is searchable; a changed field cannot be retained solely because the Form's own timestamp was unchanged.
+7. If field searches return no results but form names do, open **Index details** and check for a per-form *field catalogue unavailable* message. This indicates a BMC API incompatibility or missing permissions; do not interpret it as the form having no fields.
+
+## Design / limitations
+
+- 100% read-only metadata search. No AR writes, Java agent, external services, REST login, or database access. Index exists in memory only. BMC's native opening and DEF export operations are reused.
+- Field metadata is retrieved via a small, **public-API read-only method adapter**: preferentially the AR Java API `getListFieldObjects(formName)` on the studio-exposed server session, or the field catalogue exposed by a BMC Form model. This avoids hardwiring internal implementation classes that differ between SDK builds. It also means actual BMC field enumeration **needs integration verification**. Failure is marked partial; the plugin will never invent field definitions.
+- BMC field labels may be view-specific; only labels/views exposed by the public model are indexed. No claim is made that all VUI labels are available. Data type may be an integer constant in some BMC API versions.
+- Only classic AR System Form and workflow definitions, not Innovation Studio record definitions, data records, or unsaved editor changes.
+- Definitions returned by the current server connection/account/overlay only; permission limits or another plugin prefilter can cause incomplete coverage. Dynamic workflow destinations remain conditional rather than proven runtime links.
+- Heavy indexing and search remain Eclipse background jobs. Results still show at most 2,000 **occurrences** in the UI; the underlying unique matching object set is not truncated for export.
+- The default object-name prefilter only filters **Form/workflow object names**, not field names. For comprehensive field searches leave it empty.
+- Offline tests validate the query engine, form-metadata reflection path and reference graph. The actual Windows SWT screen, BMC integration, form editor and DEF export must be tested against your installed Developer Studio. This environment does not contain BMC's proprietary SDK binaries and therefore cannot produce a correctly SDK-validated JAR on its own.
+
+## Structure
+
+- `source/se.yrell.search/` — complete plugin code and OSGi metadata.
+- `tests/` — SDK-backed regression tests and separate offline-only BMC interface stubs.
+- `scripts/build.sh`, `scripts/test.sh` — compile/test with your BMC Developer Studio SDK.
+- `scripts/test-core-offline.sh` — independent search and form-metadata tests; test stubs never ship in the plugin JAR.
+- `scripts/install-to-git.sh`, `scripts/update-external.sh` — source merge and full safe upgrade.
