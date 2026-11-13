@@ -16,6 +16,10 @@ import org.eclipse.core.runtime.jobs.ISchedulingRule;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
@@ -30,6 +34,8 @@ import com.bmc.arsys.studio.model.type.IARSystemTypes;
 import se.yrell.search.SearchPlugin;
 import se.yrell.search.bmc.IndexBuilder;
 import se.yrell.search.bmc.StudioIntegration;
+import se.yrell.search.bmc.CrossServerOpener;
+import se.yrell.search.core.ObjectNames;
 import se.yrell.search.core.ReferenceGraph;
 import se.yrell.search.core.SearchIndex;
 
@@ -49,6 +55,7 @@ public final class SearchView extends ViewPart {
     private Combo server, mode;
     private Text query, namePrefilter, details;
     private Table matchTable, objectTable, relationTable;
+    private ConnectionOverview connectionOverview;
     private Label status;
     private Button refresh, refreshChanged, cancel, advancedToggle;
     private Composite advanced;
@@ -150,30 +157,24 @@ public final class SearchView extends ViewPart {
                 new int[]{105, 260, 135, 230, 420, 88}, true);
         objectTable = newTable("Objects", new String[]{"Type", "Object", "Matches"},
                 new int[]{140, 420, 100}, true);
-        relationTable = newTable("Connections", new String[]{"Direction", "Connection", "Target / source", "Where", "Confidence"},
-                new int[]{100, 190, 310, 220, 100}, false);
+        relationTable = newConnectionTab();
         matchTable.addListener(SWT.Selection, e -> focusedFromSelection(matchTable));
         objectTable.addListener(SWT.Selection, e -> focusedFromSelection(objectTable));
         matchTable.addListener(SWT.DefaultSelection, e -> openSelected());
         objectTable.addListener(SWT.DefaultSelection, e -> openSelected());
         relationTable.addListener(SWT.DefaultSelection, e -> openSelected());
         relationTable.addListener(SWT.Selection, e -> relationDetails());
-        for (Table t : new Table[]{matchTable, objectTable, relationTable}) {
-            Menu menu = new Menu(t);
-            MenuItem open = new MenuItem(menu, SWT.PUSH);
-            open.setText("Open in Developer Studio"); open.addListener(SWT.Selection, e -> openSelected());
-            MenuItem export = new MenuItem(menu, SWT.PUSH);
-            export.setText("Export selected to DEF..."); export.addListener(SWT.Selection, e -> exportSelected());
-            t.setMenu(menu);
-        }
+        for (Table t : new Table[]{matchTable, objectTable, relationTable}) installContextMenu(t);
         details = new Text(sash, SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
         details.setText("Select a match to see the exact source location and its value. Connections appear in a separate tab.");
         sash.setWeights(new int[]{76,24});
 
-        Composite footer = line(root, 5);
+        Composite footer = line(root, 6);
         status = new Label(footer, SWT.NONE);
         status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         status.setText("Select an AR server and build an index. Saved definitions only.");
+        Button copyNames = button(footer, "Copy names", "Copy names of selected objects, one per line");
+        copyNames.addListener(SWT.Selection, e -> copySelectedNames());
         Button open = button(footer, "Open selected", "Open highlighted objects using BMC's editor");
         open.addListener(SWT.Selection, e -> openSelected());
         Button export = button(footer, "Export selected...", "BMC DEF export for highlighted objects");
@@ -220,6 +221,145 @@ public final class SearchView extends ViewPart {
         });
         tab.setControl(t); return t;
     }
+    private Table newConnectionTab() {
+        TabItem tab = new TabItem(tabs, SWT.NONE);
+        tab.setText("Connections");
+        Composite pane = new Composite(tabs, SWT.NONE);
+        GridLayout layout = new GridLayout(1, false);
+        layout.marginWidth = 0; layout.marginHeight = 0; layout.verticalSpacing = 5;
+        pane.setLayout(layout);
+        connectionOverview = new ConnectionOverview(pane);
+        GridData overviewData = new GridData(SWT.FILL, SWT.TOP, true, false);
+        overviewData.heightHint = 145;
+        connectionOverview.setLayoutData(overviewData);
+        Table t = new Table(pane, SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL);
+        t.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        t.setHeaderVisible(true); t.setLinesVisible(true);
+        String[] names={"Direction", "Connection", "Target / source", "Where", "Confidence"};
+        int[] widths={100,190,310,220,100};
+        for (int i=0;i<names.length;i++) {
+            TableColumn col = new TableColumn(t, SWT.LEFT);
+            col.setText(names[i]); col.setWidth(widths[i]);
+        }
+        tab.setControl(pane);
+        return t;
+    }
+
+    /** Native SWT context menu, rebuilt as connections change; selection is resolved at click time. */
+    private void installContextMenu(Table table) {
+        Menu menu = new Menu(table);
+        MenuItem copy = new MenuItem(menu, SWT.PUSH);
+        copy.setText("Copy Object Name(s)");
+        copy.addListener(SWT.Selection, e -> copySelectedNames());
+        new MenuItem(menu, SWT.SEPARATOR);
+        MenuItem open = new MenuItem(menu, SWT.PUSH);
+        open.setText("Open in Developer Studio");
+        open.addListener(SWT.Selection, e -> openSelected());
+        MenuItem alternate = new MenuItem(menu, SWT.CASCADE);
+        alternate.setText("Open on Server");
+        Menu servers = new Menu(menu);
+        alternate.setMenu(servers);
+        new MenuItem(menu, SWT.SEPARATOR);
+        MenuItem export = new MenuItem(menu, SWT.PUSH);
+        export.setText("Export selected to DEF...");
+        export.addListener(SWT.Selection, e -> exportSelected());
+        menu.addListener(SWT.Show, e -> {
+            boolean hasItems = !selection().isEmpty();
+            copy.setEnabled(hasItems);
+            open.setEnabled(hasItems);
+            export.setEnabled(hasItems);
+            for (MenuItem m: servers.getItems()) m.dispose();
+            int available = 0;
+            if (hasItems && current()) {
+                for (IStore other: connectedAlternateStores()) {
+                    MenuItem option = new MenuItem(servers, SWT.PUSH);
+                    option.setText(other.getName() + " · " + other.getUser() +
+                            (other instanceof IARServerStore ar ? " · overlay " + ar.getOverlayGroup() : ""));
+                    option.addListener(SWT.Selection, event -> openOnOtherServer(other));
+                    available++;
+                }
+            }
+            if (available == 0) {
+                MenuItem empty = new MenuItem(servers, SWT.PUSH);
+                empty.setEnabled(false);
+                empty.setText("No other connected AR server");
+            }
+            alternate.setEnabled(hasItems && available>0);
+        });
+        table.addListener(SWT.MenuDetect, e -> {
+            if (e.x<0 || e.y<0) return;
+            Point location=table.toControl(new Point(e.x,e.y));
+            TableItem clicked=table.getItem(location);
+            if(clicked!=null && !table.isSelected(table.indexOf(clicked))) {
+                table.setSelection(clicked);
+                if(table==matchTable || table==objectTable) focusedFromSelection(table);
+            }
+        });
+        table.setMenu(menu);
+    }
+
+    private List<IStore> connectedAlternateStores() {
+        List<IStore> others=new ArrayList<>();
+        try {
+            for (IStore store: StoreManager.getInstance().getStores()) {
+                if(store instanceof ARServerStore && store!=sourceStore && store.isConnected()) others.add(store);
+            }
+        } catch (RuntimeException ex) { SearchPlugin.error("Cannot enumerate target AR servers",ex); }
+        return others;
+    }
+
+    private void copySelectedNames() {
+        List<IModelItem> selected=selection();
+        if(selected.isEmpty()) return;
+        String text=ObjectNames.lines(selected.stream().map(IModelItem::getName).toList());
+        if (text.isEmpty()) return;
+        Clipboard clipboard=new Clipboard(getSite().getShell().getDisplay());
+        try { clipboard.setContents(new Object[]{text},new Transfer[]{TextTransfer.getInstance()}); }
+        finally { clipboard.dispose(); }
+        status.setText("Copied " + ObjectNames.uniqueCount(selected.stream().map(IModelItem::getName).toList()) +
+                " object name(s) to clipboard.");
+    }
+
+    private void openOnOtherServer(IStore target) {
+        if(!canOperate() || target==sourceStore || !target.isConnected()) return;
+        List<CrossServerOpener.ObjectKey> keys=CrossServerOpener.keys(selection());
+        if (keys.isEmpty()) return;
+        long request=generation.get();
+        Display display=getSite().getShell().getDisplay();
+        status.setText("Looking up " + keys.size() + " object(s) on " + target.getName() + " in Progress...");
+        Job job = new Job("Yrell Search: Open on " + target.getName()) {
+            @Override protected IStatus run(IProgressMonitor monitor) {
+                try {
+                    CrossServerOpener.Resolution found=CrossServerOpener.resolve(target,keys,monitor);
+                    if(monitor.isCanceled()) return Status.CANCEL_STATUS;
+                    display.asyncExec(() -> {
+                        if(disposed || request!=generation.get() || !target.isConnected()) return;
+                        if(!found.missing().isEmpty() || !found.errors().isEmpty()) {
+                            StringBuilder reason=new StringBuilder();
+                            reason.append("On ").append(target.getName()).append(": ")
+                                  .append(found.resolved().size()).append(" found, ")
+                                  .append(found.missing().size()).append(" missing, ")
+                                  .append(found.errors().size()).append(" retrieval errors.\n\n");
+                            int max=12;
+                            for(String missing:found.missing()) { if(max--<=0) break; reason.append("Not found: ").append(missing).append("\n"); }
+                            for(String error:found.errors()) { if(max--<=0) break; reason.append("Error: ").append(error).append("\n"); }
+                            MessageDialog.openWarning(getSite().getShell(),"Yrell Search – Cross-server open",reason.toString());
+                        }
+                        if(!found.resolved().isEmpty()) StudioIntegration.open(getSite().getShell(),found.resolved());
+                        status.setText("Open on " + target.getName() + ": " + found.resolved().size() +
+                                " found · " + found.missing().size() + " missing · " + found.errors().size() + " errors");
+                    });
+                    return found.errors().isEmpty()?Status.OK_STATUS:
+                            new Status(IStatus.WARNING,SearchPlugin.ID,"Some target definitions could not be resolved");
+                } catch (Exception ex) {
+                    SearchPlugin.error("Cross-server open failed",ex);
+                    return new Status(IStatus.ERROR,SearchPlugin.ID,"Cross-server open failed",ex);
+                }
+            }
+        };
+        job.setRule(INDEX_RULE); job.setUser(true); job.schedule();
+    }
+
     private void reloadServers() {
         IStore before = selectedStore();
         server.removeAll(); serverStores.clear();
@@ -248,6 +388,8 @@ public final class SearchView extends ViewPart {
     private void clearResults() {
         results = null; focusedEntry = null; currentLinks.clear();
         matchTable.setItemCount(0); objectTable.setItemCount(0); relationTable.removeAll();
+        if(connectionOverview!=null && !connectionOverview.isDisposed())
+            connectionOverview.showObject(null,List.of(),List.of());
         details.setText("Search saved workflow definitions. Select a match for details and connections.");
     }
     private void startIndex(boolean incremental) {
@@ -385,9 +527,18 @@ public final class SearchView extends ViewPart {
     }
     private void refreshRelations() {
         relationTable.removeAll(); currentLinks.clear();
-        if (graph==null || focusedEntry==null) return;
+        if (graph==null || focusedEntry==null) {
+            connectionOverview.showObject(null,List.of(),List.of());
+            return;
+        }
         currentLinks.addAll(graph.outgoing(focusedEntry));
         currentLinks.addAll(graph.incoming(focusedEntry));
+        List<String> inbound=new ArrayList<>(),outbound=new ArrayList<>();
+        for(ReferenceGraph.Link<IModelItem> l:graph.incoming(focusedEntry)) inbound.add(l.from().name());
+        for(ReferenceGraph.Link<IModelItem> l:graph.outgoing(focusedEntry)) {
+            outbound.add(l.to()==null?l.targetName():l.to().name());
+        }
+        connectionOverview.showObject(focusedEntry.name(),inbound,outbound);
         for (ReferenceGraph.Link<IModelItem> l:currentLinks) {
             boolean out = l.from()==focusedEntry;
             String target = out ? l.to()==null ? l.targetName() : l.to().name() : l.from().name();

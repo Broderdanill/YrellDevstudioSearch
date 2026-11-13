@@ -2,7 +2,7 @@
 set -o pipefail
 set -u
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-JAR="$ROOT/install/se.yrell.search_0.2.0.jar"
+JAR="$ROOT/install/se.yrell.search_0.2.1.jar"
 if [[ ! -f "$JAR" ]]; then echo 'Build first.' >&2; exit 2; fi
 mkdir -p "$ROOT/.build/tests"
 STUDIO="${1:-$ROOT/.build/devstudio/x64/plugins}"

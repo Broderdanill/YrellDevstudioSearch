@@ -13,8 +13,8 @@ mkdir -p "$TARGET/source/se.yrell.search" "$TARGET/scripts" "$TARGET/tests" "$TA
 rsync -a --delete "$HERE/source/se.yrell.search/" "$TARGET/source/se.yrell.search/" || exit 1
 rsync -a --delete "$HERE/scripts/" "$TARGET/scripts/" || exit 1
 rsync -a --delete "$HERE/tests/" "$TARGET/tests/" || exit 1
-rm -f "$TARGET"/install/se.yrell.search_0.1.0.jar
-rsync -a "$HERE/install/se.yrell.search_0.2.0.jar" "$TARGET/install/" || exit 1
+rm -f "$TARGET"/install/se.yrell.search_*.jar
+rsync -a "$HERE/install/se.yrell.search_0.2.1.jar" "$TARGET/install/" || exit 1
 cp "$HERE/README.md" "$HERE/CHANGELOG.md" "$TARGET/" || exit 1
 cat > "$TARGET/.gitignore" <<'IGNORE'
 .build/

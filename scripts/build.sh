@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Yrell Devstudio Search 0.2.0; Java 17; BMC Developer Studio 26.1.1.
+# Yrell Devstudio Search 0.2.1; Java 17; BMC Developer Studio 26.1.1.
 set -o pipefail
 set -u
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,5 +32,6 @@ javac --release 17 -proc:none -encoding UTF-8 -cp "$CP" -d "$BUILD/classes" @"$B
 cp -a "$BUILD/classes"/. "$BUILD/package"/
 cp "$ROOT/source/se.yrell.search/plugin.xml" "$BUILD/package/"
 cp "$ROOT/source/se.yrell.search/README.md" "$BUILD/package/"
-jar --create --file "$ROOT/install/se.yrell.search_0.2.0.jar" --manifest "$ROOT/source/se.yrell.search/META-INF/MANIFEST.MF" -C "$BUILD/package" . || exit 1
-printf 'Output: %s\n' "$ROOT/install/se.yrell.search_0.2.0.jar"
+rm -f "$ROOT"/install/se.yrell.search_*.jar
+jar --create --file "$ROOT/install/se.yrell.search_0.2.1.jar" --manifest "$ROOT/source/se.yrell.search/META-INF/MANIFEST.MF" -C "$BUILD/package" . || exit 1
+printf 'Output: %s\n' "$ROOT/install/se.yrell.search_0.2.1.jar"

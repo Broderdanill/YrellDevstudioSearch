@@ -1,7 +1,23 @@
-# Yrell Devstudio Search 0.2.0
+# Yrell Devstudio Search 0.2.1
 
 Standalone Eclipse/OSGi plugin `se.yrell.search`, built against BMC Developer Studio **26.1.1 build001** (Java 17).
 Target Git repository: `/home/dice/Git/YrellDevstudioSearch`.
+
+## What's new in 0.2.1
+
+- **Copy Object Name(s):** right-click an entry in Matches, Objects or Connections to copy one or several selected unique object names, one per line. A **Copy names** button also appears in the footer.
+- **Open on Server → [connected server]:** right-click selected workflow objects, pick another connected AR server (displayed with account and overlay), and resolve the **exact object type and name** there. It runs as an Eclipse Progress Job. Missing objects are reported; the plugin never falls back to opening a source-server item.
+- **Visual Connections map:** a compact read-only overview above the exact Connections list shows incoming relations, the selected object and outgoing relations, with three labels per side and a +N indicator for busy objects.
+- Native BMC opening and DEF export are preserved. No Java agent, external library or BMC binaries are bundled.
+
+### Open on Server – boundaries
+
+1. The context menu lists other **currently connected AR servers**. Destination identity is determined by exact object type and exact name, scoped to the destination account and overlay.
+2. Nothing is copied or deployed to the destination, and the source index is not changed.
+3. Uses the destination's BMC `IStore.getItemList(type,names)` name-scoped lookup. Missing, unsupported and inaccessible items are reported, not silently substituted. Some BMC providers may not support this lookup.
+4. Multi-selection is supported. Existing target objects open even if others were not found, with a summary of all unavailable objects. The lookup runs in Eclipse Progress rather than on the SWT UI thread.
+5. **Export always remains from the indexed source server.** Cross-server opening is not a comparison tool; two identically named objects may have different definitions.
+6. UI behavior, live AR-server resolution and BMC native opening on another server require testing in the Windows installation.
 
 ## What's new in 0.2.0
 
@@ -16,11 +32,11 @@ Target Git repository: `/home/dice/Git/YrellDevstudioSearch`.
 
 ## Typical usage
 
-1. Install `install/se.yrell.search_0.2.0.jar` to the **plugins** folder of Developer Studio on Windows, replacing 0.1.0. Start with `-clean` once.
+1. Install `install/se.yrell.search_0.2.1.jar` to the **plugins** folder of Developer Studio on Windows, replacing 0.2.0 (and any older plugin JAR). Start with `-clean` once.
 2. Window → Show View → Other → Yrell Search → Yrell Search.
 3. Choose the connected AR server and click **Build / Refresh index**. Watch Eclipse Progress. Full indexing may require many AR API calls; there is **no automatic index build at startup**.
 4. Check one or more object types under **Search in**. Choose *Everywhere* or a narrower content mode, then search.
-5. Inspect matches and their action positions. Switch to *Objects* to select/export unambiguous whole definitions. Use *Connections* to inspect linked objects; double-click a resolvable related object to open it.
+5. Inspect matches and action positions. Switch to *Objects* to select/export unique definitions. Right-click a row to **Copy Object Name(s)** or **Open on Server** (multi-select supported). Use *Connections* for a visual overview and an exact list; double-click a resolvable related object to open it.
 6. Click **Refresh changed** for subsequent reads, or run full refresh if object timestamps / provider metadata might be stale.
 
 ## Query examples

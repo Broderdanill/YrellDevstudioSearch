@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (2026-11-13)
+
+- Add **Copy Object Name(s)** to the context menu in all three result tabs, plus a footer action. Deduplicate repeated hits and separate selected names with newlines.
+- Add **Open on Server** sub-menu of other connected AR servers (with account and overlay). Resolve selected workflow definitions by exact type/name on the target, in an Eclipse Progress Job. Never reuse source `IModelItem` for a different server; clearly report missing, unsupported and inaccessible items.
+- Add a compact visual relationship overview with incoming / selected / outgoing layout. Preserve the exact clickable Connections table beneath the overview.
+- Preserve original indexing, query, and DEF export functionality. Add focused regression tests for clipboard payload and exact cross-server matching.
+
 ## 0.2.0 (2026-11-13)
 
 - Major workflow search expansion built on the functioning 0.1.0 structure, remaining independent of Yrell Developer Tools.
